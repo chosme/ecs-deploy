@@ -32,6 +32,7 @@ def get_client(access_key_id, secret_access_key, region, profile):
 @click.option('-e', '--env', type=(str, str, str), multiple=True, help='Adds or changes an environment variable: <container> <name> <value>')
 @click.option('-s', '--secret', type=(str, str, str), multiple=True, help='Adds or changes a secret environment variable from the AWS Parameter Store (Not available for Fargate): <container> <name> <parameter name>')
 @click.option('-r', '--role', type=str, help='Sets the task\'s role ARN: <task role ARN>')
+@click.option('-x', '--execution-role', type=str, help='Sets the execution\'s role ARN: <execution role ARN>')
 @click.option('--task', type=str, help='Task definition to be deployed. Can be a task ARN or a task family with optional revision')
 @click.option('--region', required=False, help='AWS region (e.g. eu-central-1)')
 @click.option('--access-key-id', required=False, help='AWS access key id')
@@ -48,7 +49,7 @@ def get_client(access_key_id, secret_access_key, region, profile):
 @click.option('--rollback/--no-rollback', default=False, help='Rollback to previous revision, if deployment failed (default: --no-rollback)')
 @click.option('--exclusive-env', is_flag=True, default=False, help='Set the given environment variables exclusively and remove all other pre-existing env variables from all containers')
 @click.option('--exclusive-secrets', is_flag=True, default=False, help='Set the given secrets exclusively and remove all other pre-existing secrets from all containers')
-def deploy(cluster, service, tag, image, command, env, secret, role, task, region, access_key_id, secret_access_key, profile, timeout, newrelic_apikey, newrelic_appid, comment, user, ignore_warnings, diff, deregister, rollback, exclusive_env, exclusive_secrets):
+def deploy(cluster, service, tag, image, command, env, secret, role, execution_role, task, region, access_key_id, secret_access_key, profile, timeout, newrelic_apikey, newrelic_appid, comment, user, ignore_warnings, diff, deregister, rollback, exclusive_env, exclusive_secrets):
     """
     Redeploy or modify a service.
 
@@ -71,6 +72,7 @@ def deploy(cluster, service, tag, image, command, env, secret, role, task, regio
         td.set_environment(env, exclusive_env)
         td.set_secrets(secret, exclusive_secrets)
         td.set_role_arn(role)
+        td.set_execution_role_arn(execution_role)
 
         if diff:
             print_diff(td)
@@ -149,6 +151,7 @@ def scale(cluster, service, desired_count, access_key_id, secret_access_key, reg
 
 @click.command()
 @click.argument('cluster')
+@click.argument('service')
 @click.argument('task')
 @click.argument('count', required=False, default=1)
 @click.option('-c', '--command', type=(str, str), multiple=True, help='Overwrites the command in a container: <container> <command>')
@@ -159,18 +162,19 @@ def scale(cluster, service, desired_count, access_key_id, secret_access_key, reg
 @click.option('--secret-access-key', help='AWS secret access key')
 @click.option('--profile', help='AWS configuration profile name')
 @click.option('--diff/--no-diff', default=True, help='Print what values were changed in the task definition')
-def run(cluster, task, count, command, env, secret, region, access_key_id, secret_access_key, profile, diff):
+def run(cluster, service, task, count, command, env, secret, region, access_key_id, secret_access_key, profile, diff):
     """
     Run a one-off task.
 
     \b
     CLUSTER is the name of your cluster (e.g. 'my-custer') within ECS.
+    SERVICE is the name of your service (e.g. 'my-app') within ECS.
     TASK is the name of your task definition (e.g. 'my-task') within ECS.
     COUNT is the number of tasks your service should run.
     """
     try:
         client = get_client(access_key_id, secret_access_key, region, profile)
-        action = RunAction(client, cluster)
+        action = RunAction(client, cluster, service)
 
         td = action.get_task_definition(task)
         td.set_commands(**{key: value for (key, value) in command})
